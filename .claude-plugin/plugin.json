@@ -3,7 +3,7 @@
   "name": "class-sz",
   "displayName": "CLASS_SZ Assistant",
   "description": "Specialized Claude assistance for class_sz (CLASS extension for halo-model SZ observables) and classy_szfast — both the classic Class_sz() pipeline and the JAX/differentiable cl_yy_from_params pipeline, with recipes for wiring class_sz into a cobaya likelihood.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": {
     "name": "Boris Bolliet",
     "email": "boris.bolliet@gmail.com"

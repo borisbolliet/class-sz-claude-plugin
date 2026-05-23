@@ -113,42 +113,102 @@ params:
 
 The classy_sz cobaya wrapper supports extra observables beyond `Cl_sz`: `sz_binned_cluster_counts`, `sz_unbinned_cluster_counts`. Request them by adding to the likelihood's `get_requirements`.
 
-## SOLikeT SZLikelihood pattern
+## Canonical y-map likelihood — standalone (no SOLikeT)
 
-`soliket.ymap.ymap_ps.SZLikelihood` (subclass of `soliket.gaussian.GaussianLikelihood`) is the canonical y-map bandpower likelihood. Skeleton:
+The cleanest pattern is a `cobaya.likelihood.Likelihood` subclass that loads bandpowers + cov directly and computes the Gaussian `logp` itself. No SOLikeT dependency, no inheritance chain, ~50 lines. This is what `/class-sz:build-likelihood` scaffolds by default.
 
 ```python
-from soliket.gaussian import GaussianLikelihood
+from cobaya.likelihood import Likelihood
+from cobaya.theory import Theory
 import numpy as np, os
 from typing import Optional
 
-class SZLikelihood(GaussianLikelihood):
+class SZLikelihood(Likelihood):
     sz_data_directory: Optional[str] = None
-    ymap_ps_file: Optional[str] = None        # ell  y^2  sigma  (3 cols)
-    ymap_cov_file: Optional[str] = None       # N×N covariance (N = number of bandpowers)
+    ymap_ps_file:      Optional[str] = None    # 3 cols: ell, D_ell × 1e12, σ
+    ymap_cov_file:     Optional[str] = None    # N×N covariance
 
     def initialize(self):
         D = np.loadtxt(os.path.join(self.sz_data_directory, self.ymap_ps_file))
-        self.ell_plc, self.y2AndFg_plc, self.sigma_tot_plc = D[:,0], D[:,1], D[:,2]
-        try:
-            self.covmat = np.loadtxt(os.path.join(self.sz_data_directory, self.ymap_cov_file))
-        except Exception:
-            self.covmat = np.diag(self.sigma_tot_plc**2)
-        super().initialize()
+        self.ell, self.y, self.sigma = D[:,0], D[:,1], D[:,2]
+        if self.ymap_cov_file:
+            self.cov = np.loadtxt(os.path.join(self.sz_data_directory, self.ymap_cov_file))
+        else:
+            self.cov = np.diag(self.sigma**2)
+        self.inv_cov = np.linalg.inv(self.cov)
+        sign, logdet = np.linalg.slogdet(self.cov)
+        self.log_norm = -0.5*logdet - 0.5*len(self.y)*np.log(2*np.pi)
 
     def get_requirements(self):
         return {"Cl_sz": {}, "Cl_sz_foreground": {}}
 
-    def _get_data(self):       return self.ell_plc, self.y2AndFg_plc
-    def _get_cov(self):        return self.covmat
-    def _get_theory(self, **p):
-        theory = self.provider.get_Cl_sz()             # {'ell','1h','2h'}
-        cl = np.asarray(theory['1h']) + np.asarray(theory['2h'])
+    def logp(self, **p):
+        t = self.provider.get_Cl_sz()                         # {'ell','1h','2h'}
+        cl = np.asarray(t['1h']) + np.asarray(t['2h'])
         fg = self.provider.get_Cl_sz_foreground()
-        return cl + fg if fg is not None else cl
+        if fg is not None: cl = cl + np.asarray(fg)
+        r = self.y - cl
+        return -0.5 * float(r @ self.inv_cov @ r) + self.log_norm
+
+
+class SZForegroundTheory(Theory):
+    params = {"A_CIB": 0.0, "A_RS": 0.0, "A_IR": 0.0}
+    foreground_data_directory: Optional[str] = None
+    foreground_data_file: Optional[str] = "data_fg-ell-cib_rs_ir_cn-total-planck-collab-15.txt"
+
+    def initialize(self):
+        D = np.loadtxt(os.path.join(self.foreground_data_directory, self.foreground_data_file))
+        self.A_CIB_MODEL, self.A_RS_MODEL = D[:,1], D[:,2]
+        self.A_IR_MODEL,  self.A_CN_MODEL = D[:,3], D[:,4]
+
+    def calculate(self, state, want_derived=False, **p):
+        A_CN = 0.9033                                        # Bolliet+18 (1712.00788)
+        if p["A_CIB"]==0 and p["A_RS"]==0 and p["A_IR"]==0:
+            state["Cl_sz_foreground"] = None
+        else:
+            state["Cl_sz_foreground"] = (p["A_CIB"]*self.A_CIB_MODEL +
+                p["A_RS"]*self.A_RS_MODEL + p["A_IR"]*self.A_IR_MODEL + A_CN*self.A_CN_MODEL)
+
+    def get_Cl_sz_foreground(self):
+        return self._current_state["Cl_sz_foreground"]
 ```
 
-For a fast/differentiable variant that bypasses cobaya's theory wiring, see **[`/class-sz:build-likelihood`](../build-likelihood/SKILL.md)** — it scaffolds a Likelihood that calls `cl_yy_from_params` directly.
+Run cobaya-run from the workdir so the module is on `sys.path`. The YAML references the bare module name (`mymod.SZLikelihood`), not `soliket.ymap.…`.
+
+For a differentiable variant that bypasses the cobaya theory wiring entirely, see **[`/class-sz:build-likelihood --jax`](../build-likelihood/SKILL.md)** — it calls `cl_yy_from_params` directly inside `logp`.
+
+### Legacy: SOLikeT inheritance pattern
+
+If you're reproducing a chain that already references `soliket.ymap.ymap_ps.SZLikelihood` (and you have `soliket` installed), you can keep the inheritance form:
+
+```python
+from soliket.gaussian import GaussianLikelihood
+class SZLikelihood(GaussianLikelihood):
+    # ... same fields ...
+    def _get_data(self):  return self.ell, self.y
+    def _get_cov(self):   return self.covmat
+    def _get_theory(self, **p):
+        t = self.provider.get_Cl_sz()
+        cl = np.asarray(t['1h']) + np.asarray(t['2h'])
+        fg = self.provider.get_Cl_sz_foreground()
+        return cl + np.asarray(fg) if fg is not None else cl
+```
+
+Prefer standalone for new work — fewer dependencies, no version skew, no SOLikeT install footguns.
+
+## Workdir convention
+
+Self-contained layout for a tSZ fit:
+
+```
+<workdir>/
+├── ymap_ps.py             # the standalone likelihood module (or whatever name you pick)
+├── <run-name>.yaml        # cobaya input
+├── data/                  # bandpowers, cov, multipoles, foreground template
+└── chains/                # cobaya output
+```
+
+Always `cd` into `<workdir>` before invoking cobaya-run, so the likelihood module is importable. The `/class-sz:build-likelihood` skill produces exactly this layout.
 
 ## Workflow recipes
 
