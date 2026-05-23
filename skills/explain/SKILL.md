@@ -16,12 +16,13 @@ Help with [class_sz](https://github.com/CLASS-SZ/class_sz) (independent Boltzman
 
 **Local venv:** `~/pyvenvs/py312-class_sz/bin/python` has classy_sz, classy_szfast, cobaya, getdist, jax. Always invoke that python when running examples. `soliket` may or may not be installed; prefer standalone likelihoods to avoid the dependency.
 
-## Two calculation pipelines — pick by use case
+## Three calculation pipelines — pick by use case
 
 | Pipeline | Module | When to use |
 | --- | --- | --- |
-| **Classic** | `from classy_sz import Class as Class_sz` | Full surface: cosmology + every halo-model observable. Production cobaya runs via `classy_szfast.classy_sz.classy_sz` (the cobaya theory wrapper). |
-| **JAX ultrafast** | `from classy_szfast.differentiable import cl_yy_from_params` | Fast/differentiable Cl^yy only; gradient-based inference, emulator training, parameter sweeps; ~200 evals/s. |
+| **`classy_szlite`** ⭐ PREFERRED | `import classy_szlite as csl` | Pure-JAX, minimal deps (jax + numpy + mcfit), ede-v2 default. Covers CMB Cls, Pk linear/nonlinear, distances, derived params, halo-model Cl^yy. `cl_yy_factory` gives **~5 ms/eval** for fixed-cosmology MCMC. Use this for any new tSZ work. Repo: https://github.com/CLASS-SZ/classy_szlite |
+| **Classic** | `from classy_sz import Class as Class_sz` | Full halo-model surface for observables not in classy_szlite (cluster counts, kSZ², CIB cross-spectra, etc.). Production cobaya runs via `classy_szfast.classy_sz.classy_sz`. |
+| **`classy_szfast.differentiable`** | `from classy_szfast.differentiable import cl_yy_from_params` | Older JAX path with broader cosmo_model support (lcdm/mnu/neff/wcdm/ede/ede-v2). Use only if classy_szlite doesn't support what you need. |
 
 ### Pipeline 1 — Classic `Class_sz()`
 

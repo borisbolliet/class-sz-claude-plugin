@@ -3,7 +3,7 @@
   "name": "class-sz",
   "displayName": "CLASS_SZ Assistant",
   "description": "Specialized Claude assistance for class_sz (independent Boltzmann + halo-model theory code extending CLASS) and classy_szfast (Python wrapper, CosmoPower emulators, JAX differentiable pipeline). Covers full cosmology runs (matter Pk, CMB Cls, lensing) plus halo-model observables (tSZ, kSZ, CIB, galaxy auto/cross, cluster counts), and recipes for wiring class_sz into cobaya likelihoods (including the tSZ Cl^yy power-spectrum bandpower fit from the may26 workdir).",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "author": {
     "name": "Boris Bolliet",
     "email": "boris.bolliet@gmail.com"
