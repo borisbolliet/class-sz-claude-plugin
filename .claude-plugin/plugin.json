@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "class-sz",
+  "displayName": "CLASS_SZ Assistant",
+  "description": "Specialized Claude assistance for class_sz (CLASS extension for halo-model SZ observables) and classy_szfast — both the classic Class_sz() pipeline and the JAX/differentiable cl_yy_from_params pipeline, with recipes for wiring class_sz into a cobaya likelihood.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Boris Bolliet",
+    "email": "boris.bolliet@gmail.com"
+  },
+  "homepage": "https://github.com/CLASS-SZ/class_sz",
+  "license": "MIT",
+  "keywords": [
+    "class_sz",
+    "classy_szfast",
+    "tsz",
+    "sz",
+    "cosmology",
+    "halo-model",
+    "jax",
+    "cobaya"
+  ]
+}
