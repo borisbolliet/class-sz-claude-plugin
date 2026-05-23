@@ -1,13 +1,13 @@
 ---
-description: Scaffold a cobaya likelihood for a y-map bandpower dataset using class_sz. Produces a Python likelihood module + working cobaya YAML ready to MCMC. Defaults to a standalone implementation (no SOLikeT dependency); --soliket and --jax flags switch to alternative styles.
+description: Scaffold a cobaya likelihood for a tSZ Cl^yy power-spectrum bandpower dataset using class_sz. Produces a Python likelihood module + working cobaya YAML ready to MCMC. Defaults to a standalone implementation (no SOLikeT dependency); --soliket and --jax flags switch to alternative styles.
 disable-model-invocation: true
 argument-hint: "<likelihood-name> [--soliket | --jax] [--data-dir DIR]"
 allowed-tools: Read Write Edit Glob Grep Bash(~/pyvenvs/py312-class_sz/bin/python *) Bash(~/pyvenvs/py312-class_sz/bin/cobaya-run -t *) Bash(~/pyvenvs/py312-class_sz/bin/cobaya-run --test *)
 ---
 
-# Build a cobaya likelihood for a y-map bandpower dataset
+# Build a cobaya likelihood for a Cl^yy power-spectrum bandpower dataset
 
-Scaffold a Gaussian likelihood + foreground theory module and a working cobaya YAML for a tSZ bandpower dataset using class_sz. Output: a Python file and a YAML, both pointing at a local workdir.
+Scaffold a Gaussian likelihood + foreground theory module and a working cobaya YAML for a **tSZ Cl^yy power-spectrum bandpower dataset** (the data is binned bandpowers + an N×N covariance, NOT y-map pixels — the historical SOLikeT name `ymap_ps.py` is misleading; "ps" already means power spectrum, the `ymap` prefix is legacy carryover). Output: a Python file and a YAML, both pointing at a local workdir.
 
 Arguments in `$ARGUMENTS`:
 - `$0` — likelihood class name in CamelCase (e.g. `ACTYMapLikelihood`)

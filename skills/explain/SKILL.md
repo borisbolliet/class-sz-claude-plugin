@@ -1,21 +1,27 @@
 ---
-description: class_sz / classy_szfast — CLASS extension for halo-model SZ observables. Two calculation pipelines (classic Class_sz, JAX cl_yy_from_params), pressure profiles (GNFW, Arnaud, Battaglia), mass functions, cobaya integration via classy_szfast.classy_sz.classy_sz, and the SOLikeT SZLikelihood pattern. Use when writing or debugging tSZ power spectrum calculations, scaffolding a y-map likelihood, or running cobaya MCMCs that fit C_ell^yy.
-when_to_use: User mentions class_sz, classy_sz, classy_szfast, tSZ power spectrum, Cl_sz, y-map likelihood, SZLikelihood, GNFW / Arnaud / Battaglia pressure profile, P0GNFW, betaGNFW, cl_yy_from_params, CosmoParams, ProfileParamsA10/B12, ACT / Planck tSZ bandpowers.
+description: class_sz / classy_szfast — independent Boltzmann + halo-model theory code extending CLASS. Covers full cosmology (matter Pk, CMB Cls, lensing, H(z)) plus halo-model observables (tSZ Cl^yy, kSZ, CIB, galaxy auto/cross, HOD, cluster counts). Two calculation pipelines (classic Class_sz, JAX cl_yy_from_params), pressure profiles (GNFW / Arnaud / Battaglia), mass functions, cobaya integration via classy_szfast.classy_sz.classy_sz, and the standalone Cl^yy power-spectrum likelihood pattern. Use when writing or debugging class_sz calculations, scaffolding a tSZ bandpower likelihood, or running cobaya MCMCs that fit Cl^yy (or any halo-model observable).
+when_to_use: User mentions class_sz, classy_sz, classy_szfast, tSZ / Cl^yy power spectrum, kSZ², CIB, galaxy×lensing, HOD, cluster counts, halo mass function, matter Pk via emulators, Cl_sz, SZLikelihood, GNFW / Arnaud / Battaglia pressure profile, P0GNFW, betaGNFW, cl_yy_from_params, CosmoParams, ProfileParamsA10/B12, ACT / Planck tSZ bandpowers.
 allowed-tools: Read Grep Glob Bash(~/pyvenvs/py312-class_sz/bin/python *) Bash(~/pyvenvs/py312-class_sz/bin/cobaya-run *) Bash(~/pyvenvs/py312-class_sz/bin/cobaya-install *) Bash(~/pyvenvs/py312-class_sz/bin/getdist *)
 ---
 
 # class_sz / classy_szfast assistant
 
-Help with [class_sz](https://github.com/CLASS-SZ/class_sz) (CLASS extension for halo-model SZ observables) and [classy_szfast](https://github.com/CLASS-SZ/classy_szfast) (Python wrapper + emulators + JAX pipeline).
+Help with [class_sz](https://github.com/CLASS-SZ/class_sz) (independent Boltzmann + halo-model theory code extending CLASS) and [classy_szfast](https://github.com/CLASS-SZ/classy_szfast) (Python wrapper + CosmoPower emulators + JAX differentiable pipeline).
 
-**Local venv:** `~/pyvenvs/py312-class_sz/bin/python` has classy_sz, classy_szfast, cobaya, soliket all installed. Always invoke that python when running examples.
+**class_sz is a full theory code**, not just a halo-model add-on — it can replace CAMB/CLASS in any cobaya run. Capabilities (notebooks in `docs/notebooks/` of the source repo):
+
+- **Cosmology**: matter Pk (linear + nonlinear), CMB Cls (TT/TE/EE), CMB lensing, H(z), σ8, halo mass function. Uses CosmoPower emulators in fast mode for ~ms-level cosmology evaluation.
+- **Halo-model observables**: tSZ Cl^yy (1h + 2h + trispectrum), kSZ × tracers, CIB auto/cross, galaxy auto/cross, galaxy×lensing, tSZ×lensing, HOD, cluster counts (binned and unbinned).
+- **Differentiable**: `classy_szfast.differentiable.cl_yy_from_params` is a fully JAX-jittable / grad-able Cl^yy pipeline (~200 evals/s on CPU). More observables being added.
+
+**Local venv:** `~/pyvenvs/py312-class_sz/bin/python` has classy_sz, classy_szfast, cobaya, getdist, jax. Always invoke that python when running examples. `soliket` may or may not be installed; prefer standalone likelihoods to avoid the dependency.
 
 ## Two calculation pipelines — pick by use case
 
 | Pipeline | Module | When to use |
 | --- | --- | --- |
-| **Classic** | `from classy_sz import Class as Class_sz` | Full halo-model observables (cluster counts, kSZ², trispectrum, CIB, etc.); production cobaya runs via `classy_szfast.classy_sz.classy_sz` |
-| **JAX ultrafast** | `from classy_szfast.differentiable import cl_yy_from_params` | Fast/differentiable C_ell^yy only; gradient-based inference, emulator training, parameter sweeps; ~200 evals/s |
+| **Classic** | `from classy_sz import Class as Class_sz` | Full surface: cosmology + every halo-model observable. Production cobaya runs via `classy_szfast.classy_sz.classy_sz` (the cobaya theory wrapper). |
+| **JAX ultrafast** | `from classy_szfast.differentiable import cl_yy_from_params` | Fast/differentiable Cl^yy only; gradient-based inference, emulator training, parameter sweeps; ~200 evals/s. |
 
 ### Pipeline 1 — Classic `Class_sz()`
 
@@ -113,9 +119,9 @@ params:
 
 The classy_sz cobaya wrapper supports extra observables beyond `Cl_sz`: `sz_binned_cluster_counts`, `sz_unbinned_cluster_counts`. Request them by adding to the likelihood's `get_requirements`.
 
-## Canonical y-map likelihood — standalone (no SOLikeT)
+## Canonical Cl^yy power-spectrum likelihood — standalone (no SOLikeT)
 
-The cleanest pattern is a `cobaya.likelihood.Likelihood` subclass that loads bandpowers + cov directly and computes the Gaussian `logp` itself. No SOLikeT dependency, no inheritance chain, ~50 lines. This is what `/class-sz:build-likelihood` scaffolds by default.
+For fitting tSZ Cl^yy **bandpower** data (a power spectrum measurement; not a y-map pixel likelihood, despite the historical `ymap_ps.py` filename in SOLikeT), the cleanest pattern is a `cobaya.likelihood.Likelihood` subclass that loads bandpowers + covariance directly and computes the Gaussian `logp` itself. No SOLikeT dependency, no inheritance chain, ~50 lines. This is what `/class-sz:build-likelihood` scaffolds by default.
 
 ```python
 from cobaya.likelihood import Likelihood
