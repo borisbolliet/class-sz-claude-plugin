@@ -45,17 +45,26 @@ Designed to compose with the
 
 ## Install
 
-Local testing (no marketplace needed):
-
-```bash
-claude --plugin-dir ~/GitHub/class-sz-claude-plugin
-```
-
-From a marketplace (once published):
+In any Claude Code session, run these three commands:
 
 ```
-/plugin marketplace add <owner>/<marketplace-repo>
-/plugin install class-sz@<marketplace-name>
+/plugin marketplace add https://github.com/borisbolliet/class-sz-claude-plugin.git
+/plugin install class-sz@class-sz-claude-plugin
+/reload-plugins
+```
+
+After `/reload-plugins`, `/class-sz:explain`, `/class-sz:tszfast`,
+`/class-sz:build-likelihood` show in `/help` and the
+`class-sz-engineer` subagent appears in the Agent picker.
+
+To update later (after I push a new commit):
+
+```
+/plugin uninstall class-sz@class-sz-claude-plugin
+/plugin marketplace remove class-sz-claude-plugin
+/plugin marketplace add https://github.com/borisbolliet/class-sz-claude-plugin.git
+/plugin install class-sz@class-sz-claude-plugin
+/reload-plugins
 ```
 
 ## Environment
@@ -90,14 +99,16 @@ How do I sample profile parameters at fixed cosmology with NUTS?
 ## Layout
 
 ```
-.claude-plugin/plugin.json
-skills/
-  explain/SKILL.md                # always-on classy_szlite knowledge
-  explain/reference.md            # loaded on demand
-  tszfast/SKILL.md                # /class-sz:tszfast
-  build-likelihood/SKILL.md       # /class-sz:build-likelihood
-agents/
-  class-sz-engineer.md            # subagent
+.claude-plugin/marketplace.json     # single-plugin marketplace
+plugins/class-sz/
+  .claude-plugin/plugin.json        # plugin manifest
+  skills/
+    explain/SKILL.md                # always-on classy_szlite knowledge
+    explain/reference.md            # loaded on demand
+    tszfast/SKILL.md                # /class-sz:tszfast
+    build-likelihood/SKILL.md       # /class-sz:build-likelihood
+  agents/
+    class-sz-engineer.md            # subagent
 ```
 
 ## License
