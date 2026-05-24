@@ -282,6 +282,80 @@ A full runnable example (with corner plot + cobaya-MH overlay) is at
 in the classy_szlite repo. Typical numbers on a single-thread laptop:
 8000 samples × 4 chains in ~64 s, R-hat = 1.01, zero divergences.
 
+### When NUTS vs random-walk Metropolis?
+
+- **NUTS** wins on dimensionality (handles d ~ 100 without manual
+  proposal-covariance tuning; RW-MH gets impractical above d ~ 30),
+  on degenerate posteriors (gradient information uses one or more
+  correlation lengths per trajectory), and on diagnostics (R-hat
+  + divergence counts). At fixed cosmology with cl_yy_factory
+  (~5 ms/eval) the leapfrog overhead (~3× cost per step) more than
+  pays off in ESS/eval.
+- **RW-MH** wins when the forward model is NOT differentiable
+  (wrapped C/Fortran, no JAX port), when the posterior is
+  multimodal (gradients don't jump modes), or for very cheap
+  forwards where the per-step cost ratio dominates.
+- **For tSZ Cl^yy bandpower fits**: NUTS is the right default
+  because the posterior is unimodal and the forward is pure JAX.
+  We keep cobaya RW-MH as the "before" baseline only.
+
+## Simulation-based inference (SBI / NPE via flowjax)
+
+SBI does NOT require gradients of the forward model — it needs FAST
+simulation, which classy_szlite delivers (~5 ms/eval, vmap-batchable).
+The example trains a conditional Masked Autoregressive Flow on
+~8000 simulations per cosmology and returns an **amortised
+posterior** at any new bandpower realisation in O(ms):
+
+```python
+from flowjax.flows import masked_autoregressive_flow
+from flowjax.distributions import Normal
+from flowjax.train import fit_to_data
+
+flow = masked_autoregressive_flow(
+    key=jr.key(0), base_dist=Normal(jnp.zeros(2)),
+    cond_dim=n_bandpowers, nn_width=128, nn_depth=3, flow_layers=8,
+)
+flow, _ = fit_to_data(jr.key(0), flow, data=(theta_train, y_train),
+                     max_epochs=500, batch_size=512, learning_rate=5e-4)
+samples = flow.sample(jr.key(1), sample_shape=(3000,), condition=y_obs)
+```
+
+Tips: standardise both theta and y before training; use sequential
+proposals (round 1 = uniform prior; round 2 = Gaussian around the
+L-BFGS bestfit) for sample efficiency; flowjax 19+ requires
+`jr.key(0)` not `jr.PRNGKey(0)`.
+
+Full example at
+[`examples/sbi_clyy_profile.py`](https://github.com/CLASS-SZ/classy_szlite/blob/main/examples/sbi_clyy_profile.py)
+(~5 s simulation + ~10 s training per cosmology, posterior agrees
+with NUTS to ~σ).
+
+## Fisher matrix in one autodiff sweep
+
+For a Gaussian likelihood with fixed covariance Σ, the Fisher
+matrix at θ is F_ij = (∂_i μ)ᵀ Σ⁻¹ (∂_j μ), with μ = forward(θ).
+`jax.jacfwd` returns the full Jacobian J = ∂μ/∂θ in one
+forward-mode autodiff sweep:
+
+```python
+import jax, jax.numpy as jnp
+
+def mu(x): return forward(x[0], x[1])
+J = jax.jit(jax.jacfwd(mu))(theta_bf)            # (n_bp, 2)
+F = J.T @ inv_cov @ J
+cov_fisher = jnp.linalg.inv(F)
+```
+
+Wall time: ~135 ms per Fisher matrix after warmup. Agrees with
+2-pt central FD (eps=1e-3) to ~1e-6. The Fisher Gaussian
+approximation captures only the local curvature at the bestfit
+and will under-estimate uncertainties when the true posterior is
+skewed — useful sanity check for forecasts.
+
+Full example at
+[`examples/fisher_clyy_profile.py`](https://github.com/CLASS-SZ/classy_szlite/blob/main/examples/fisher_clyy_profile.py).
+
 ## Workdir convention
 
 Self-contained layout for a tSZ fit:
