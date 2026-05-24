@@ -100,35 +100,21 @@ at one of (in priority order):
 1. `$CLASSY_SZLITE_DATA_DIR`
 2. `~/class_sz_data/`
 
-Expected layout (the loader auto-prefers the pickle-free
-`_v2_plain.npz` form if present, falls back to legacy `_v2.npz`):
+Expected layout — the pickle-free `_v2_plain.npz` files:
 
 ```
 <root>/ede/
-├── TTTEEE/
-│   ├── TT_v2.npz   TT_v2_plain.npz
-│   ├── TE_v2.npz   TE_v2_plain.npz
-│   └── EE_v2.npz   EE_v2_plain.npz
-├── PP/
-│   └── PP_v2.npz   PP_v2_plain.npz
-├── PK/
-│   ├── PKL_v2.npz   PKL_v2_plain.npz
-│   └── PKNL_v2.npz  PKNL_v2_plain.npz
-├── growth-and-distances/
-│   ├── HZ_v2.npz    HZ_v2_plain.npz
-│   ├── DAZ_v2.npz   DAZ_v2_plain.npz
-│   └── S8Z_v2.npz   S8Z_v2_plain.npz
-└── derived-parameters/
-    └── DER_v2.npz   DER_v2_plain.npz
+├── TTTEEE/{TT,TE,EE}_v2_plain.npz
+├── PP/PP_v2_plain.npz
+├── PK/{PKL,PKNL}_v2_plain.npz
+├── growth-and-distances/{HZ,DAZ,S8Z}_v2_plain.npz
+└── derived-parameters/DER_v2_plain.npz
 ```
 
-Get the files from
+Get them from
 [cosmopower-organization/ede](https://github.com/cosmopower-organization/ede).
-
-The `_v2.npz` files require `cosmopower` + `tensorflow` to deserialise
-(they're pickled `cosmopower_NN` instances). The `_v2_plain.npz` files
-load with pure numpy (`allow_pickle=False`) — no TF needed. Same
-weights, ~8% smaller. `classy_szlite` prefers `_plain` automatically.
+They load with `allow_pickle=False` — no TensorFlow / cosmopower
+needed.
 
 ## What the `v2` emulators cover
 
@@ -246,8 +232,3 @@ inside a `numpyro.factor("loglike", ...)` call — see the SKILL.md
   `Σmν = 3 × m_ncdm`. `derived()` uses this.
 - **Don't `jax.jit(ev)`** — internals call `mcfit.TophatVar` which
   is not jit-safe.
-- **Tensorflow** is **not** required at runtime when `_v2_plain.npz`
-  files are present. If you see a `ModuleNotFoundError: tensorflow`
-  on first emulator load, either grab the `_plain` files from
-  cosmopower-organization/ede or install tensorflow-cpu just to
-  deserialise (the forward pass + gradients are still pure JAX).
