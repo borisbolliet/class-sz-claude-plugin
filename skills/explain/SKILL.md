@@ -1,164 +1,229 @@
 ---
-description: class_sz / classy_szfast — independent Boltzmann + halo-model theory code extending CLASS. Covers full cosmology (matter Pk, CMB Cls, lensing, H(z)) plus halo-model observables (tSZ Cl^yy, kSZ, CIB, galaxy auto/cross, HOD, cluster counts). Two calculation pipelines (classic Class_sz, JAX cl_yy_from_params), pressure profiles (GNFW / Arnaud / Battaglia), mass functions, cobaya integration via classy_szfast.classy_sz.classy_sz, and the standalone Cl^yy power-spectrum likelihood pattern. Use when writing or debugging class_sz calculations, scaffolding a tSZ bandpower likelihood, or running cobaya MCMCs that fit Cl^yy (or any halo-model observable).
-when_to_use: User mentions class_sz, classy_sz, classy_szfast, tSZ / Cl^yy power spectrum, kSZ², CIB, galaxy×lensing, HOD, cluster counts, halo mass function, matter Pk via emulators, Cl_sz, SZLikelihood, GNFW / Arnaud / Battaglia pressure profile, P0GNFW, betaGNFW, cl_yy_from_params, CosmoParams, ProfileParamsA10/B12, ACT / Planck tSZ bandpowers.
+description: classy_szlite — pure-JAX cosmology code (CMB Cls, matter Pk linear/nonlinear, distances, derived params, halo-model tSZ Cl^yy). Backed by the v2 CosmoPower emulators (same as ACT DR6 extended-cosmology analyses). Differentiable via jax.grad, JIT-friendly, and built around a fast-path `cl_yy_factory` closure for fixed-cosmology MCMC over profile parameters. Use when writing or debugging classy_szlite calculations, scaffolding a tSZ Cl^yy bandpower likelihood, running cobaya MCMCs, or using NUTS / HMC samplers on the GNFW pressure profile.
+when_to_use: User mentions classy_szlite, csl, CosmoParams, ProfileParamsA10, cl_yy, cl_yy_factory, cl_TTTEEE, Pk, Pnl, distances, derived, halo-model integrals, GNFW / Arnaud pressure profile, P0GNFW, betaGNFW, tSZ Cl^yy bandpower likelihood, ACT-DR6 tSZ, may26 cobaya fit, NUTS / HMC over profile parameters, JAX gradient probes through cl_yy, cobaya Theory wiring via classy_szlite.
 allowed-tools: Read Grep Glob Bash(~/pyvenvs/py312-class_sz/bin/python *) Bash(~/pyvenvs/py312-class_sz/bin/cobaya-run *) Bash(~/pyvenvs/py312-class_sz/bin/cobaya-install *) Bash(~/pyvenvs/py312-class_sz/bin/getdist *)
 ---
 
-# class_sz / classy_szfast assistant
+# classy_szlite assistant
 
-Help with [class_sz](https://github.com/CLASS-SZ/class_sz) (independent Boltzmann + halo-model theory code extending CLASS) and [classy_szfast](https://github.com/CLASS-SZ/classy_szfast) (Python wrapper + CosmoPower emulators + JAX differentiable pipeline).
+Help with [classy_szlite](https://github.com/CLASS-SZ/classy_szlite) — a
+pure-JAX cosmology code backed by the high-accuracy `v2` CosmoPower
+emulators (same emulators as the [ACT DR6 extended-cosmology
+analysis](https://arxiv.org/abs/2503.14454) and the [ACT DR6 + DESI DR2
+EDE / H_0 analysis by Poulin et al.](https://arxiv.org/abs/2505.08051)).
 
-**class_sz is a full theory code**, not just a halo-model add-on — it can replace CAMB/CLASS in any cobaya run. Capabilities (notebooks in `docs/notebooks/` of the source repo):
+**Runtime deps:** `jax + numpy + mcfit`. No tensorflow, no keras, no
+cosmopower at runtime (the `_v2_plain.npz` emulator files are pure-numpy
+loadable). Forward pass + gradients are pure JAX.
 
-- **Cosmology**: matter Pk (linear + nonlinear), CMB Cls (TT/TE/EE), CMB lensing, H(z), σ8, halo mass function. Uses CosmoPower emulators in fast mode for ~ms-level cosmology evaluation.
-- **Halo-model observables**: tSZ Cl^yy (1h + 2h + trispectrum), kSZ × tracers, CIB auto/cross, galaxy auto/cross, galaxy×lensing, tSZ×lensing, HOD, cluster counts (binned and unbinned).
-- **Differentiable**: `classy_szfast.differentiable.cl_yy_from_params` is a fully JAX-jittable / grad-able Cl^yy pipeline (~200 evals/s on CPU). More observables being added.
+**Local venv:** `~/pyvenvs/py312-class_sz/bin/python` has classy_szlite,
+cobaya, numpyro, getdist, jax. Always invoke that python when running
+examples.
 
-**Local venv:** `~/pyvenvs/py312-class_sz/bin/python` has classy_sz, classy_szfast, cobaya, getdist, jax. Always invoke that python when running examples. `soliket` may or may not be installed; prefer standalone likelihoods to avoid the dependency.
-
-## Three calculation pipelines — pick by use case
-
-| Pipeline | Module | When to use |
-| --- | --- | --- |
-| **`classy_szlite`** ⭐ PREFERRED | `import classy_szlite as csl` | Pure-JAX, minimal deps (jax + numpy + mcfit), ede-v2 default. Covers CMB Cls, Pk linear/nonlinear, distances, derived params, halo-model Cl^yy. `cl_yy_factory` gives **~5 ms/eval** for fixed-cosmology MCMC. Use this for any new tSZ work. Repo: https://github.com/CLASS-SZ/classy_szlite |
-| **Classic** | `from classy_sz import Class as Class_sz` | Full halo-model surface for observables not in classy_szlite (cluster counts, kSZ², CIB cross-spectra, etc.). Production cobaya runs via `classy_szfast.classy_sz.classy_sz`. |
-| **`classy_szfast.differentiable`** | `from classy_szfast.differentiable import cl_yy_from_params` | Older JAX path with broader cosmo_model support (lcdm/mnu/neff/wcdm/ede/ede-v2). Use only if classy_szlite doesn't support what you need. |
-
-### Pipeline 1 — Classic `Class_sz()`
-
-```python
-from classy_sz import Class as Class_sz
-c = Class_sz()
-c.set(cosmo_params)        # omega_b, omega_cdm, H0, tau_reio, ln10^{10}A_s, n_s, cosmo_model
-c.set(precision_params)    # n_z_pressure_profile, n_m_pressure_profile, FFT controls
-c.set({
-    'output': 'tSZ_1h',                   # or 'tSZ_tSZ_1h,tSZ_Trispectrum', 'kSZ_kSZ_1h', ...
-    'mass_function': 'T08M500c',
-    'pressure_profile': 'GNFW',           # or 'B12' (Battaglia), 'A10' (Arnaud)
-    'multipoles': '/path/to/ls.txt',      # OR set ell_min/ell_max/dlogell
-    'z_min': 0.005, 'z_max': 3.0,
-    'M_min': 1e10, 'M_max': 3.5e15,
-    'c500': 1.156, 'gammaGNFW': 0.3292, 'alphaGNFW': 1.062,
-    'P0GNFW': 8.13, 'betaGNFW': 5.4807,
-})
-c.compute_class_szfast()                  # NOT compute() — fast mode uses emulators for cosmology
-out = c.cl_sz()                           # {'ell': [...], '1h': [...], '2h': [...]}
-T_llp = c.tllprime_sz()                   # trispectrum (when 'tSZ_Trispectrum' in output)
-```
-
-### Pipeline 2 — JAX `cl_yy_from_params`
+## API surface (everything top-level on `classy_szlite`)
 
 ```python
 import jax, jax.numpy as jnp
 jax.config.update("jax_enable_x64", True)
-from classy_szfast.differentiable import CosmoParams, ProfileParamsA10, ProfileParamsB12, cl_yy_from_params
+import classy_szlite as csl
 
-cosmo = CosmoParams(omega_b=0.02242, omega_cdm=0.11933, H0=67.66,
-                    tau_reio=0.0561, ln10_10_As=3.047, n_s=0.9665)
-profile = ProfileParamsA10()                                  # Arnaud 10 defaults; override P0, c500, gamma, alpha, beta
+# --- parameter containers (NamedTuple pytrees) ---
+cosmo   = csl.CosmoParams()                                # Planck-18 defaults
+profile = csl.ProfileParamsA10(P0=8.13, beta=5.48, B=1.25)
 
-ell = jnp.geomspace(2, 5000, 80)
-cl_1h, cl_2h = cl_yy_from_params(
-    ell, cosmo, profile_params=profile,
-    profile='arnaud10', delta_crit=500.0,                     # use 'battaglia12' + 200.0 for B12
-    n_z=100, n_m=200,                                          # halo-model grids
-)
-# gradient via jax.grad — fully differentiable
-g_cosmo, g_profile = jax.grad(lambda c, p: jnp.sum(cl_yy_from_params(ell, c, profile_params=p,
-    profile='arnaud10', delta_crit=500.0)[0]), argnums=(0,1))(cosmo, profile)
+# --- cosmology calculations ---
+csl.derived(cosmo)                # {'sigma_8', 'Omega_m', 'S8', 'der_full': ndarray(17,)}
+csl.cl_TTTEEE(cosmo)              # {'ell', 'tt', 'te', 'ee'}  dimensionless D_ell
+csl.Pk(cosmo, [0., 0.5, 1., 2.])  # (k, P_lin(z, k)) — k in h/Mpc, P in (Mpc/h)³
+csl.Pnl(cosmo, [0., 0.5])         # (k, P_nl(z, k))  — HMcode
+csl.distances(cosmo, [0.1, 1.0])  # (Hz/c [1/Mpc], chi [Mpc], Da [Mpc])
+
+# --- halo-model tSZ Cl^yy ---
+ell = jnp.geomspace(2, 9000, 80)
+cl_1h, cl_2h = csl.cl_yy(cosmo, profile, ell)              # full pipeline, ~18 ms warm
+
+# --- FAST PATH for MCMC over profile, fixed cosmology ---
+ev = csl.cl_yy_factory(cosmo, ell)                         # one-shot CosmoGrids + HaloGrids
+cl_1h, cl_2h = ev(profile)                                 # ~5 ms / call
 ```
 
-## Pressure profiles
+All functions are JAX-traceable; you can `jax.grad`, `jax.jacfwd`,
+`jax.vmap` any of them. The `CosmoParams` / `ProfileParamsA10` are JAX
+pytrees so gradients return the same container type.
 
-| Name | `pressure_profile` (classic) | `profile=` (JAX) | `delta_crit` | Sampled params |
-| --- | --- | --- | --- | --- |
-| GNFW / Arnaud 2010 | `GNFW` | `arnaud10` | 500 | `P0GNFW`, `c500`, `gammaGNFW`, `alphaGNFW`, `betaGNFW` |
-| Battaglia 2012 | `B12` | `battaglia12` | 200 | `P0_A`, `P0_am`, `P0_az`, `xc_A`, `xc_am`, `xc_az`, `beta_A`, `beta_am`, `beta_az` |
+## When to use which entry point
 
-In the JAX pipeline these are fields of the `ProfileParamsA10` / `ProfileParamsB12` NamedTuples — pass partial overrides as kwargs, defaults fill the rest.
+| Task | Function | Per-eval cost |
+| --- | --- | --- |
+| Fixed-cosmology MCMC over profile params (the dominant tSZ use case) | `cl_yy_factory(cosmo, ell)(profile)` | **~5 ms** |
+| One-off Cl^yy at arbitrary cosmology | `cl_yy(cosmo, profile, ell)` | ~18 ms |
+| Fisher matrix w.r.t. profile | `jax.jacfwd(ev)(profile)` | ~20 ms |
+| Fisher / NUTS over cosmology too | full pipeline + `jax.grad` | ~50 ms |
+| CMB-only, Pk-only, distances-only | the dedicated function | 1–3 ms |
 
-## Mass functions
+**Don't wrap `cl_yy_factory(...)` in `jax.jit`** — its internals call
+`mcfit.TophatVar` (σ(R) over a fixed log-k grid) which isn't jit-safe.
+The closure is already fast and `jax.grad` works through it directly.
 
-`mass_function` in the classic pipeline — common values: `T08M500c` (Tinker 2008 with M500c), `T08M200c`, `T08M200m`, `T10M200m`, `B16M200m` (Bocquet 2016), etc.
+## Pressure profile
 
-## cobaya integration
+Currently classy_szlite ships **Arnaud 2010 GNFW** only. Container
+fields:
 
-Theory wrapper: **`classy_szfast.classy_sz.classy_sz`** — subclasses `cobaya.theories.classy.classy`. It registers a `Collector` that calls `classy_sz.cl_sz()` and exposes the result via `provider.get_Cl_sz()`.
+| Field | Default | Meaning |
+| --- | --- | --- |
+| `P0`    | 8.130  | central pressure normalisation |
+| `c500`  | 1.156  | concentration at r500c |
+| `gamma` | 0.3292 | inner slope |
+| `alpha` | 1.062  | transition slope |
+| `beta`  | 5.4807 | outer slope |
+| `B`     | 1.25   | hydrostatic mass bias (M_true = M_obs / B) |
 
-YAML:
-```yaml
-theory:
-  classy_szfast.classy_sz.classy_sz:
-    use_class_sz_fast_mode: 1            # use compute_class_szfast() (emulators)
-    use_class_sz_no_cosmo_mode: 1        # SKIP cosmology — fixed via extra_args; sample only profile/HOD/...
-    extra_args:
-      output: tSZ_1h
-      mass_function: T08M500c
-      pressure_profile: GNFW
-      multipoles: /path/to/ls.txt
-      c500: 1.156
-      gammaGNFW: 0.3292
-      alphaGNFW: 1.062
-      z_min: 0.005
-      z_max: 3.0
-      M_min: 1.0e10
-      M_max: 3.5e15
-      omega_b: 0.0226           # only when use_class_sz_no_cosmo_mode: 1
-      omega_cdm: 0.118
-      H0: 68.22
-      logA: 3.06
-      n_s: 0.9743
-likelihood:
-  soliket.ymap.ymap_ps.SZLikelihood:
-    sz_data_directory: /path/to/data/
-    ymap_ps_file: data_ps-ell-y2-erry2_...txt
-    ymap_cov_file: cov_..._test.txt
-params:
-  P0GNFW:  { prior: {min: 0, max: 20}, ref: {dist: norm, loc: 8.13,    scale: 0.1}, proposal: 0.1 }
-  betaGNFW:{ prior: {min: 0, max: 10}, ref: {dist: norm, loc: 5.4807,  scale: 0.1}, proposal: 0.1 }
-```
+In the cobaya YAML the canonical sampled names are `P0GNFW`,
+`betaGNFW`, etc. (the cobaya conventions); the scaffold maps them onto
+the JAX field names.
 
-The classy_sz cobaya wrapper supports extra observables beyond `Cl_sz`: `sz_binned_cluster_counts`, `sz_unbinned_cluster_counts`. Request them by adding to the likelihood's `get_requirements`.
+## Cosmology container
 
-## Canonical Cl^yy power-spectrum likelihood — standalone (no SOLikeT)
+`CosmoParams` fields and defaults (Planck-18 ΛCDM at the
+LCDM-equivalent point of the `v2` ede emulators):
 
-For fitting tSZ Cl^yy **bandpower** data (a power spectrum measurement; not a y-map pixel likelihood, despite the historical `ymap_ps.py` filename in SOLikeT), the cleanest pattern is a `cobaya.likelihood.Likelihood` subclass that loads bandpowers + covariance directly and computes the Gaussian `logp` itself. No SOLikeT dependency, no inheritance chain, ~50 lines. This is what `/class-sz:build-likelihood` scaffolds by default.
+| Field | Default | Notes |
+| --- | --- | --- |
+| `omega_b`    | 0.02242  | physical baryon density |
+| `omega_cdm`  | 0.11933  | physical CDM density |
+| `H0`         | 67.66    | Hubble constant |
+| `tau_reio`   | 0.054    | reionisation optical depth |
+| `ln10_10_As` | 3.047    | log primordial amplitude |
+| `n_s`        | 0.9665   | scalar tilt |
+| `m_ncdm`     | 0.02 eV  | per-species neutrino mass (3 deg ν → Σmν = 0.06 eV) |
+| `N_ur`       | 0.00441  | ultra-relativistic species |
+| `fEDE`       | 0.001    | EDE fraction (silently LCDM-equivalent at this value) |
+| `log10z_c`   | 3.562    | EDE critical redshift |
+| `thetai_scf` | 2.83     | initial scalar-field angle |
+| `r`          | 0.0      | tensor-to-scalar ratio |
+
+For ΛCDM work, override only the standard 6 (`omega_b, omega_cdm, H0,
+tau_reio, ln10_10_As, n_s`) — the rest stay at the LCDM-equivalent
+defaults silently. For EDE / w-CDM / ν-CDM / Neff-CDM exploration, set
+the relevant extra fields explicitly (the `v2` emulator covers all of
+them).
+
+## Halo-model Cl^yy convergence
+
+Default integration grids (`n_z=100, n_m=200, m_min=1e10, m_max=3.5e15`)
+give max |ΔC/C| ≤ 10⁻³ across ℓ ∈ [100, 8000] against an `n_z=400,
+n_m=600` reference. Full sweep in the
+[convergence study](https://classy-szlite.readthedocs.io/en/latest/convergence.html).
+
+| Use case | n_z | n_m | target accuracy |
+| --- | --- | --- | --- |
+| MCMC / production (default) | 100 | 200 | ≤ 10⁻³ |
+| Forecast / pre-MCMC         |  50 | 100 | ≤ 3×10⁻³ |
+| Reference / cross-check     | 300 | 200 | ≤ 10⁻⁴ |
+| Quick smoke-test            |  25 |  50 | ~1% |
+
+## Canonical Cl^yy bandpower likelihood (standalone, no SOLikeT)
+
+For fitting tSZ Cl^yy **bandpower** data (a power-spectrum
+measurement; not a y-map pixel likelihood, despite the historical
+`ymap_ps.py` filename in some legacy code), the cleanest pattern is a
+`cobaya.likelihood.Likelihood` subclass that loads bandpowers +
+covariance directly and computes the Gaussian `logp` itself. This is
+what `/class-sz:build-likelihood` scaffolds by default.
 
 ```python
 from cobaya.likelihood import Likelihood
-from cobaya.theory import Theory
+from cobaya.theory     import Theory
 import numpy as np, os
 from typing import Optional
+import jax, jax.numpy as jnp
+jax.config.update("jax_enable_x64", True)
+import classy_szlite as csl
 
-class SZLikelihood(Likelihood):
+
+class ClyyLikelihood(Likelihood):
     sz_data_directory: Optional[str] = None
     ymap_ps_file:      Optional[str] = None    # 3 cols: ell, D_ell × 1e12, σ
-    ymap_cov_file:     Optional[str] = None    # N×N covariance
+    ymap_cov_file:     Optional[str] = None    # N × N covariance
 
     def initialize(self):
         D = np.loadtxt(os.path.join(self.sz_data_directory, self.ymap_ps_file))
-        self.ell, self.y, self.sigma = D[:,0], D[:,1], D[:,2]
-        if self.ymap_cov_file:
-            self.cov = np.loadtxt(os.path.join(self.sz_data_directory, self.ymap_cov_file))
-        else:
-            self.cov = np.diag(self.sigma**2)
+        self.ell, self.y, self.sigma = D[:, 0], D[:, 1], D[:, 2]
+        self.cov = np.loadtxt(os.path.join(self.sz_data_directory, self.ymap_cov_file)) \
+                   if self.ymap_cov_file else np.diag(self.sigma**2)
         self.inv_cov = np.linalg.inv(self.cov)
         sign, logdet = np.linalg.slogdet(self.cov)
-        self.log_norm = -0.5*logdet - 0.5*len(self.y)*np.log(2*np.pi)
+        self.log_norm = -0.5 * logdet - 0.5 * len(self.y) * np.log(2*np.pi)
 
     def get_requirements(self):
         return {"Cl_sz": {}, "Cl_sz_foreground": {}}
 
     def logp(self, **p):
-        t = self.provider.get_Cl_sz()                         # {'ell','1h','2h'}
+        t  = self.provider.get_Cl_sz()                                  # {'ell','1h','2h'}
         cl = np.asarray(t['1h']) + np.asarray(t['2h'])
         fg = self.provider.get_Cl_sz_foreground()
-        if fg is not None: cl = cl + np.asarray(fg)
+        if fg is not None:
+            cl = cl + np.asarray(fg)
         r = self.y - cl
         return -0.5 * float(r @ self.inv_cov @ r) + self.log_norm
 
 
-class SZForegroundTheory(Theory):
+class ClyyTheory(Theory):
+    """classy_szlite-backed Cl_sz provider with cl_yy_factory fast path."""
+    multipoles_file: Optional[str] = None
+    n_z:        int   = 100
+    n_m:        int   = 200
+    delta_crit: float = 500.0
+
+    # Standard 6 cosmology — fixed for this Theory
+    omega_b:    float = 0.0226
+    omega_cdm:  float = 0.118
+    H0:         float = 68.22
+    tau_reio:   float = 0.0561
+    ln10_10_As: float = 3.06
+    n_s:        float = 0.9743
+
+    params = {"P0GNFW": 8.13, "c500": 1.156, "gammaGNFW": 0.3292,
+              "alphaGNFW": 1.062, "betaGNFW": 5.48, "B": 1.25}
+
+    def initialize(self):
+        ell_array = np.loadtxt(self.multipoles_file)
+        self._ell = jnp.asarray(ell_array)
+        self.ell_np = ell_array
+        self._dl_factor = jnp.asarray(ell_array * (ell_array+1) / (2*np.pi) * 1e12)
+
+        cosmo = csl.CosmoParams(
+            omega_b=self.omega_b, omega_cdm=self.omega_cdm,
+            H0=self.H0, tau_reio=self.tau_reio,
+            ln10_10_As=self.ln10_10_As, n_s=self.n_s,
+        )
+        self._csl  = csl
+        self._eval = csl.cl_yy_factory(
+            cosmo, self._ell,
+            n_z=self.n_z, n_m=self.n_m, delta_crit=self.delta_crit,
+        )
+
+    def get_can_provide(self): return ["Cl_sz"]
+
+    def calculate(self, state, want_derived=True, **p):
+        prof = self._csl.ProfileParamsA10(
+            P0=p["P0GNFW"], c500=p["c500"], gamma=p["gammaGNFW"],
+            alpha=p["alphaGNFW"], beta=p["betaGNFW"], B=p["B"],
+        )
+        cl1, cl2 = self._eval(prof)
+        state["Cl_sz"] = {
+            "ell": self.ell_np,
+            "1h":  np.asarray(self._dl_factor * cl1),
+            "2h":  np.asarray(self._dl_factor * cl2),
+        }
+
+    def get_Cl_sz(self):
+        return self._current_state["Cl_sz"]
+
+
+class ClyyForegroundTheory(Theory):
+    """CIB / RS / IR / CN foreground templates with amplitude knobs."""
     params = {"A_CIB": 0.0, "A_RS": 0.0, "A_IR": 0.0}
     foreground_data_directory: Optional[str] = None
     foreground_data_file: Optional[str] = "data_fg-ell-cib_rs_ir_cn-total-planck-collab-15.txt"
@@ -169,39 +234,53 @@ class SZForegroundTheory(Theory):
         self.A_IR_MODEL,  self.A_CN_MODEL = D[:,3], D[:,4]
 
     def calculate(self, state, want_derived=False, **p):
-        A_CN = 0.9033                                        # Bolliet+18 (1712.00788)
+        A_CN = 0.9033                                       # Bolliet+18 (1712.00788)
         if p["A_CIB"]==0 and p["A_RS"]==0 and p["A_IR"]==0:
             state["Cl_sz_foreground"] = None
         else:
             state["Cl_sz_foreground"] = (p["A_CIB"]*self.A_CIB_MODEL +
-                p["A_RS"]*self.A_RS_MODEL + p["A_IR"]*self.A_IR_MODEL + A_CN*self.A_CN_MODEL)
+                p["A_RS"]*self.A_RS_MODEL + p["A_IR"]*self.A_IR_MODEL +
+                A_CN*self.A_CN_MODEL)
 
     def get_Cl_sz_foreground(self):
         return self._current_state["Cl_sz_foreground"]
 ```
 
-Run cobaya-run from the workdir so the module is on `sys.path`. The YAML references the bare module name (`mymod.SZLikelihood`), not `soliket.ymap.…`.
+Always run `cobaya-run` from the **workdir** (where the likelihood
+module lives), so the bare module name resolves on `sys.path`.
 
-For a differentiable variant that bypasses the cobaya theory wiring entirely, see **[`/class-sz:build-likelihood --jax`](../build-likelihood/SKILL.md)** — it calls `cl_yy_from_params` directly inside `logp`.
+## Gradient-based sampling (NUTS / HMC)
 
-### Legacy: SOLikeT inheritance pattern
-
-If you're reproducing a chain that already references `soliket.ymap.ymap_ps.SZLikelihood` (and you have `soliket` installed), you can keep the inheritance form:
+Because the forward pass is pure JAX, gradient-based samplers
+(`numpyro` NUTS, `blackjax`, `flowMC`) work out of the box. For a
+fixed-cosmology profile-only fit:
 
 ```python
-from soliket.gaussian import GaussianLikelihood
-class SZLikelihood(GaussianLikelihood):
-    # ... same fields ...
-    def _get_data(self):  return self.ell, self.y
-    def _get_cov(self):   return self.covmat
-    def _get_theory(self, **p):
-        t = self.provider.get_Cl_sz()
-        cl = np.asarray(t['1h']) + np.asarray(t['2h'])
-        fg = self.provider.get_Cl_sz_foreground()
-        return cl + np.asarray(fg) if fg is not None else cl
+import numpyro, numpyro.distributions as dist
+from numpyro.infer import MCMC, NUTS
+
+ev = csl.cl_yy_factory(cosmo, jnp.asarray(ell))
+dl_factor = jnp.asarray(ell * (ell + 1) / (2 * np.pi) * 1e12)
+
+def model():
+    P0   = numpyro.sample("P0",   dist.Uniform(0.0, 20.0))
+    beta = numpyro.sample("beta", dist.Uniform(0.0, 10.0))
+    prof = csl.ProfileParamsA10(P0=P0, c500=1.156, gamma=0.3292,
+                                 alpha=1.062, beta=beta, B=1.25)
+    cl1, cl2 = ev(prof)
+    mu = dl_factor * (cl1 + cl2)
+    numpyro.factor("loglike", -0.5 * (y - mu) @ inv_cov @ (y - mu))
+
+mcmc = MCMC(NUTS(model, dense_mass=True),
+            num_warmup=500, num_samples=2000, num_chains=4)
+mcmc.run(jax.random.PRNGKey(0))
+mcmc.print_summary()
 ```
 
-Prefer standalone for new work — fewer dependencies, no version skew, no SOLikeT install footguns.
+A full runnable example (with corner plot + cobaya-MH overlay) is at
+[`examples/nuts_clyy_profile.py`](https://github.com/CLASS-SZ/classy_szlite/blob/main/examples/nuts_clyy_profile.py)
+in the classy_szlite repo. Typical numbers on a single-thread laptop:
+8000 samples × 4 chains in ~64 s, R-hat = 1.01, zero divergences.
 
 ## Workdir convention
 
@@ -209,29 +288,43 @@ Self-contained layout for a tSZ fit:
 
 ```
 <workdir>/
-├── ymap_ps.py             # the standalone likelihood module (or whatever name you pick)
-├── <run-name>.yaml        # cobaya input
-├── data/                  # bandpowers, cov, multipoles, foreground template
-└── chains/                # cobaya output
+├── <run-name>.py             # standalone likelihood + Theory module
+├── <run-name>.yaml           # cobaya input
+├── data/                     # bandpowers, cov, multipoles, foreground template
+└── chains/                   # cobaya output
 ```
 
-Always `cd` into `<workdir>` before invoking cobaya-run, so the likelihood module is importable. The `/class-sz:build-likelihood` skill produces exactly this layout.
+`cd` into `<workdir>` before invoking `cobaya-run` so the likelihood
+module is importable. The `/class-sz:build-likelihood` skill produces
+exactly this layout.
 
 ## Workflow recipes
 
-- **Quick C_ell^yy plot** → use `/class-sz:tszfast` (JAX pipeline, fast)
+- **Quick Cl^yy plot** → use `/class-sz:tszfast`
 - **Build a new likelihood for a bandpower dataset** → use `/class-sz:build-likelihood`
-- **End-to-end MCMC run on ACT/Planck data** → invoke the `class-sz-engineer` subagent
+- **End-to-end MCMC (cobaya RW-MH or NumPyro NUTS)** → invoke the
+  `class-sz-engineer` subagent
 
 ## Common pitfalls
 
-- `compute()` does the full CLASS Boltzmann solve — slow. Use `compute_class_szfast()` for emulator-mode cosmology, or set `use_class_sz_fast_mode: 1` in the cobaya extra_args
-- `use_class_sz_no_cosmo_mode: 1` skips cosmology entirely; the cosmology params must then live in `extra_args`, NOT in the cobaya sampled `params` block
-- The `multipoles` extra_arg is a file path — class_sz reads it line-by-line as ell centers. The bandpower data file must use the SAME multipoles
-- Trispectrum requires `'output': 'tSZ_tSZ_1h,tSZ_Trispectrum'` (note the leading `tSZ_tSZ_1h` for the 1h diagonal)
-- JAX pipeline currently supports only `arnaud10` and `battaglia12`. For GNFW with explicit P0/beta sampling, you can still use `arnaud10` (the parameters are equivalent up to relabeling — see [reference.md](reference.md))
-- Emulators are loaded from `~/.classy_szfast/` on first use; reinstall with `classy_szfast.install_emulators()` if missing
+- **CWD footgun**: don't run `cobaya-run` / python from `~/GitHub` —
+  PEP 420 namespace-package resolution can shadow editable installs
+  via the `cobaya/` clone subfolder. Always `cd <workdir>` first.
+- **Multipoles must match**: the `multipoles_file` passed to the Theory
+  must use the SAME ell centres as the bandpower data file. Mismatch
+  is silent.
+- **JAX 64-bit**: `jax.config.update("jax_enable_x64", True)` is set on
+  classy_szlite import — cosmology likelihoods need double precision;
+  single precision will give noticeably biased posteriors at the
+  bandpower covariance level.
+- **Don't `jax.jit` the factory closure** — internals call
+  `mcfit.TophatVar` which is not jit-safe. The closure is already fast.
+- **`m_ncdm` is per-species** (3 degenerate ν by convention), so
+  `Σmν = 3 × m_ncdm`. The `derived()` function uses this convention
+  for `Omega_m`.
 
 ## Detailed parameter reference
 
-For full lists of supported `output` strings, all `extra_args` knobs, emulator switches (`cosmo_model`), mass-function options, and the `ProfileParamsA10`/`ProfileParamsB12` field lists, see [reference.md](reference.md).
+For full field lists, emulator file conventions, and the LCDM /
+m_ν / w-CDM / N_eff / EDE coverage details, see
+[reference.md](reference.md).

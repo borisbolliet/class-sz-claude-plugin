@@ -1,24 +1,58 @@
-# CLASS_SZ Assistant (Claude Code plugin)
+# classy_szlite Assistant (Claude Code plugin)
 
-Specialized [Claude Code](https://code.claude.com) assistance for [class_sz](https://github.com/CLASS-SZ/class_sz) — an independent Boltzmann + halo-model theory code extending CLASS, covering full cosmology runs (matter Pk, CMB Cls, lensing) plus halo-model observables (tSZ, kSZ, CIB, galaxy auto/cross, cluster counts) — and [classy_szfast](https://github.com/CLASS-SZ/classy_szfast) (Python wrapper, CosmoPower emulators, JAX differentiable pipeline).
+Specialized [Claude Code](https://code.claude.com) assistance for
+[**classy_szlite**](https://github.com/CLASS-SZ/classy_szlite) — a pure-JAX
+cosmology code that exposes:
 
-Designed to compose with [cobaya-claude-plugin](https://github.com/borisbolliet/cobaya-claude-plugin) — enable both to get a full tSZ MCMC workflow.
+- CMB angular power spectra (TT, TE, EE)
+- Linear and nonlinear matter Pk
+- Cosmological distances (H(z), comoving, angular-diameter)
+- Derived parameters (σ8, Ω_m, S8, ...)
+- Halo-model tSZ Cl^yy (Arnaud-10 GNFW pressure profile)
+
+…all backed by the high-accuracy **`v2` CosmoPower emulators** used in
+the [ACT DR6 extended-cosmology analyses](https://arxiv.org/abs/2503.14454),
+and entirely differentiable with `jax.grad` / `jax.jacfwd`.
+
+Designed to compose with the
+[cobaya-claude-plugin](https://github.com/borisbolliet/cobaya-claude-plugin)
+— enable both to get a full tSZ MCMC workflow.
 
 ## What you get
 
-- **`/class-sz:explain`** — knowledge skill. Auto-loads when the conversation is about class_sz, classy_szfast, the tSZ power spectrum, the SOLikeT SZLikelihood pattern, GNFW / Arnaud / Battaglia pressure profiles, halo-model integrals, or cobaya wiring via `classy_szfast.classy_sz.classy_sz`. Bundles two pipeline cheat-sheets (classic + JAX) and a detailed parameter reference.
-- **`/class-sz:tszfast [profile=arnaud10|battaglia12] [param=value …]`** — runs a quick C_ell^yy calculation through the JAX `cl_yy_from_params` pipeline; supports sweeps and `jax.grad` probes. Useful for sanity-checking before a long cobaya run.
-- **`/class-sz:build-likelihood <Name> [--soliket | --jax] [--data-dir DIR]`** — scaffolds a standalone Gaussian likelihood (no SOLikeT dependency) + working cobaya YAML for a tSZ **Cl^yy power-spectrum bandpower** dataset (binned bandpowers + N×N covariance — not a y-map pixel likelihood). The `--soliket` flag switches to the legacy `soliket.gaussian.GaussianLikelihood` inheritance pattern; `--jax` skips the cobaya theory wrapper and calls the JAX pipeline directly from the likelihood (faster, differentiable, A10/B12 only).
-- **`class-sz-engineer` subagent** — specialist for end-to-end class_sz + cobaya work (scaffold, install, run, summarize). Use for heavy multi-step tasks where you don't want install/chain output flooding the main thread.
+- **`/class-sz:explain`** — auto-loads when the conversation is about
+  classy_szlite, tSZ Cl^yy bandpower fits, GNFW / Arnaud pressure
+  profiles, the `cl_yy_factory` fast path, JAX gradient probes, or
+  cobaya wiring of a classy_szlite-backed theory. Bundles a focused
+  classy_szlite API + parameter reference.
+
+- **`/class-sz:tszfast [param=value …]`** — runs a quick `Cl^yy`
+  calculation through `classy_szlite.cl_yy_factory`; supports
+  parameter sweeps and `jax.grad` probes. Useful for sanity-checks
+  before a long MCMC.
+
+- **`/class-sz:build-likelihood <Name> [--data-dir DIR]`** — scaffolds
+  a standalone Gaussian likelihood (no SOLikeT dep) + classy_szlite
+  Theory + foreground Theory + a working cobaya YAML for a **tSZ
+  Cl^yy bandpower** dataset (binned bandpowers + N×N covariance — not
+  a y-map pixel likelihood). Uses `cl_yy_factory` so the per-step
+  cost is ~5 ms/eval after init.
+
+- **`class-sz-engineer` subagent** — specialist for end-to-end
+  classy_szlite + cobaya work (scaffold, install, run, summarise).
+  Use for heavy multi-step tasks where you don't want install / chain
+  output flooding the main thread.
 
 ## Install
 
 Local testing (no marketplace needed):
+
 ```bash
 claude --plugin-dir ~/GitHub/class-sz-claude-plugin
 ```
 
 From a marketplace (once published):
+
 ```
 /plugin marketplace add <owner>/<marketplace-repo>
 /plugin install class-sz@<marketplace-name>
@@ -27,21 +61,30 @@ From a marketplace (once published):
 ## Environment
 
 The skills and the `class-sz-engineer` subagent assume:
-- Python venv: `~/pyvenvs/py312-class_sz/bin/python` (with `classy_sz`, `classy_szfast`, `cobaya`, `soliket`, `getdist`, `jax`).
-- class_sz source: `/Users/boris/GitHub/class_sz/`
-- Reference workflow data (ACT-DR4-yy bandpowers, fionapaper run): `/Users/boris/Library/CloudStorage/GoogleDrive-boris.bolliet@gmail.com/My Drive/yy-2026/fionapaper/`
 
-Adjust paths in `agents/class-sz-engineer.md` and the skill `allowed-tools` if your venv lives elsewhere.
+- Python venv: `~/pyvenvs/py312-class_sz/bin/python` (with
+  `classy_szlite`, `cobaya`, `numpyro`, `getdist`, `jax`)
+- classy_szlite source (optional, for editable install):
+  `~/GitHub/classy_szlite`
+- Emulator data: `~/class_sz_data/ede/` (or the path in
+  `$CLASSY_SZLITE_DATA_DIR`) — see
+  [cosmopower-organization/ede](https://github.com/cosmopower-organization/ede)
+- Reference workflow data (ACT-DR6 may26 setup):
+  `~/Desktop/class-sz-plugin-tests/` (data/, clyy_v2.py, clyy_v2.yaml,
+  may26.proposal.covmat)
+
+Adjust paths in `agents/class-sz-engineer.md` and the skill
+`allowed-tools` if your venv lives elsewhere.
 
 ## Try it
 
 ```
 /class-sz:explain
-What is the difference between use_class_sz_fast_mode and use_class_sz_no_cosmo_mode?
+How do I sample profile parameters at fixed cosmology with NUTS?
 
-/class-sz:tszfast profile=battaglia12
+/class-sz:tszfast P0=10 beta=5.0
 
-/class-sz:build-likelihood ACTYMapLikelihood --data-dir "/Users/boris/.../fionapaper/act_dr4_yy"
+/class-sz:build-likelihood ACTClyy --data-dir "~/Desktop/class-sz-plugin-tests/data"
 ```
 
 ## Layout
@@ -49,19 +92,13 @@ What is the difference between use_class_sz_fast_mode and use_class_sz_no_cosmo_
 ```
 .claude-plugin/plugin.json
 skills/
-  explain/SKILL.md                # always-on knowledge
+  explain/SKILL.md                # always-on classy_szlite knowledge
   explain/reference.md            # loaded on demand
   tszfast/SKILL.md                # /class-sz:tszfast
   build-likelihood/SKILL.md       # /class-sz:build-likelihood
 agents/
   class-sz-engineer.md            # subagent
 ```
-
-## Notes / open items
-
-- **No MCP server.** The classy_sz CLI surface (Python + cobaya-run) is invoked through Bash; MCP would only buy a typed surface or a long-lived process (e.g. a warm `Class_sz()` instance), neither of which we need yet.
-- **`disable-model-invocation: true` on `/class-sz:build-likelihood`** — scaffolding writes files, so Claude shouldn't decide on its own when to scaffold. The other two skills are model-invocable.
-- **`paths` filter** is not set on `/class-sz:explain` — it's available everywhere, auto-triggered by description match.
 
 ## License
 
