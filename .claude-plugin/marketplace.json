@@ -1,5 +1,4 @@
 {
-  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "class-sz-claude-plugin",
   "owner": {
     "name": "Boris Bolliet",
@@ -9,15 +8,11 @@
   "plugins": [
     {
       "name": "class-sz",
+      "source": "./plugins/class-sz",
       "description": "classy_szlite assistant: pure-JAX cosmology (CMB Cls, Pk, distances, derived params, halo-model tSZ Cl^yy) backed by v2 CosmoPower emulators. Pipelines, gradient probes, NUTS / SBI / Fisher recipes, cobaya bandpower likelihood scaffolding.",
       "version": "0.5.0",
       "category": "science",
       "tags": ["cosmology", "tsz", "jax", "halo-model", "cobaya", "numpyro", "act-dr6"],
-      "source": {
-        "source": "url",
-        "url": "https://github.com/borisbolliet/class-sz-claude-plugin.git",
-        "sha": "af10707255be99fcedb3e0cc24c138970d1fec07"
-      },
       "homepage": "https://github.com/borisbolliet/class-sz-claude-plugin"
     }
   ]
