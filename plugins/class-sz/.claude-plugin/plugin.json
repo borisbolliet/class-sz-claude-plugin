@@ -1,24 +1,9 @@
 {
-  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "class-sz",
-  "displayName": "classy_szlite Assistant",
-  "description": "Specialized Claude assistance for classy_szlite — a pure-JAX cosmology code that covers CMB Cls, matter Pk (linear and nonlinear), distances, derived parameters, and the halo-model tSZ Cl^yy bandpower likelihood. Backed by the v2 CosmoPower emulators used in the ACT DR6 extended-cosmology analyses. Pipelines, gradient probes, NUTS/HMC sampling, and cobaya bandpower likelihood scaffolding.",
   "version": "0.5.0",
+  "description": "classy_szlite assistant: pure-JAX cosmology (CMB Cls, Pk, distances, derived params, halo-model tSZ Cl^yy) backed by v2 CosmoPower emulators. Pipelines, gradient probes, NUTS / SBI / Fisher recipes, cobaya bandpower likelihood scaffolding.",
   "author": {
     "name": "Boris Bolliet",
     "email": "boris.bolliet@gmail.com"
-  },
-  "homepage": "https://github.com/CLASS-SZ/classy_szlite",
-  "license": "MIT",
-  "keywords": [
-    "classy_szlite",
-    "tsz",
-    "sz",
-    "cosmology",
-    "halo-model",
-    "jax",
-    "cobaya",
-    "numpyro",
-    "act-dr6"
-  ]
+  }
 }
