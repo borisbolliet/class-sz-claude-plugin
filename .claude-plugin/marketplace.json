@@ -15,7 +15,8 @@
       "tags": ["cosmology", "tsz", "jax", "halo-model", "cobaya", "numpyro", "act-dr6"],
       "source": {
         "source": "url",
-        "url": "https://github.com/borisbolliet/class-sz-claude-plugin.git"
+        "url": "https://github.com/borisbolliet/class-sz-claude-plugin.git",
+        "sha": "af10707255be99fcedb3e0cc24c138970d1fec07"
       },
       "homepage": "https://github.com/borisbolliet/class-sz-claude-plugin"
     }
